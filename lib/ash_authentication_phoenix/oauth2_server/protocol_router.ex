@@ -29,7 +29,7 @@ defmodule AshAuthentication.Phoenix.Oauth2Server.ProtocolRouter do
   use Plug.Router, copy_opts_to_assign: :oauth2_server_router_opts
 
   alias AshAuthentication.Oauth2Server.{ClientAuth, Metadata, Register, Token}
-  alias AshAuthentication.Phoenix.Oauth2Server.Errors
+  alias AshAuthentication.Phoenix.Oauth2Server.{Bearer, Errors}
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :json],
@@ -283,10 +283,9 @@ defmodule AshAuthentication.Phoenix.Oauth2Server.ProtocolRouter do
   # present. Used by `/register` to forward an RFC 7591 initial access
   # token into the protocol core.
   defp extract_bearer(conn) do
-    case Plug.Conn.get_req_header(conn, "authorization") do
-      ["Bearer " <> token | _] when token != "" -> token
-      ["bearer " <> token | _] when token != "" -> token
-      _ -> nil
+    case Bearer.extract_token(conn) do
+      {:ok, token} -> token
+      :no_token -> nil
     end
   end
 
