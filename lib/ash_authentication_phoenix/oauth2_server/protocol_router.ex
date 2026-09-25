@@ -181,10 +181,14 @@ defmodule AshAuthentication.Phoenix.Oauth2Server.ProtocolRouter do
   defp exchange_token(server, conn, params, opts) do
     case Map.get(params, "grant_type") do
       "authorization_code" ->
-        Token.exchange_authorization_code(server, params, opts)
+        with {:ok, params} <- merge_client_auth(conn, params) do
+          Token.exchange_authorization_code(server, params, opts)
+        end
 
       "refresh_token" ->
-        Token.exchange_refresh_token(server, params, opts)
+        with {:ok, params} <- merge_client_auth(conn, params) do
+          Token.exchange_refresh_token(server, params, opts)
+        end
 
       "client_credentials" ->
         if server.client_credentials_enabled?() do
@@ -217,6 +221,23 @@ defmodule AshAuthentication.Phoenix.Oauth2Server.ProtocolRouter do
 
       _ ->
         {:error, :unsupported_grant_type}
+    end
+  end
+
+  # Public clients send only a body `client_id`; confidential clients also
+  # present a secret via Basic or the body. Normalize either presentation
+  # into `client_id` + `client_secret` params so `Token` can authenticate
+  # confidential clients (RFC 6749 §4.1.3 / §6).
+  defp merge_client_auth(conn, params) do
+    case ClientAuth.optional_credentials(conn, params) do
+      :none ->
+        {:ok, params}
+
+      {:ok, client_id, client_secret, _via} ->
+        {:ok, Map.merge(params, %{"client_id" => client_id, "client_secret" => client_secret})}
+
+      {:error, _} = error ->
+        error
     end
   end
 
